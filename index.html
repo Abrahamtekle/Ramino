@@ -6,16 +6,10 @@
 <title>Ramino Online – Multiplayer</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 
-<!-- ═══ FIREBASE SDK ═══ -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, remove }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-// ══════════════════════════════════════════════════════════
-//  🔥 PASTE YOUR FIREBASE CONFIG HERE
-//  (See setup instructions below the game)
-// ══════════════════════════════════════════════════════════
+<!-- ═══ FIREBASE SDK (compat — no module race condition) ═══ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
 const firebaseConfig = {
   apiKey:            "AIzaSyB5W7ZHn69u_mOYtU99egbVPdVvSAMshj0",
   authDomain:        "ramino-fc588.firebaseapp.com",
@@ -25,15 +19,17 @@ const firebaseConfig = {
   messagingSenderId: "41797353548",
   appId:             "1:41797353548:web:06645d00615bde7faff4e9"
 };
-// ══════════════════════════════════════════════════════════
-
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
-
-// expose to global scope for rest of script
-window._fb = { db, ref, set, get, onValue, update, remove };
+firebase.initializeApp(firebaseConfig);
+const _db = firebase.database();
+window._fb = { db: _db,
+  ref:     (db, path) => _db.ref(path),
+  set:     (r, val)   => r.set(val),
+  get:     (r)        => r.once('value').then(s => ({ exists: ()=>s.exists(), val: ()=>s.val() })),
+  onValue: (r, cb)    => { r.on('value', snap => cb({ exists: ()=>snap.exists(), val: ()=>snap.val() })); return ()=>r.off('value'); },
+  update:  (r, val)   => r.update(val),
+  remove:  (r)        => r.remove()
+};
 window._fbReady = true;
-window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <style>
@@ -351,10 +347,11 @@ let selected=[];    // [{ci}] indices into localHand
 let unsubscribe=null;
 let fb=null;
 
-// Wait for firebase to load
-window.addEventListener('fb-ready',()=>{ fb=window._fb; });
+// Firebase is loaded synchronously via compat SDK
+fb = window._fb;
 function ensureFb(){
-  if(!fb){showErr('Firebase not ready. Did you paste your config?');return false;}
+  fb = window._fb;
+  if(!fb){showErr('Firebase not ready — check your internet connection.');return false;}
   return true;
 }
 
